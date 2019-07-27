@@ -42,37 +42,44 @@ int main(int argc, char* argv[]) {
 	char* p = 0;
 		
 	int cur = lseek(fd, -BUFFER, SEEK_END);
-		printf("SEEK at : %d\n", lseek(fd, 0, SEEK_CUR));
 	
 	while((bytes_read = read(fd, buf, length_to_read)) != -1) {
 		ssize_t i = bytes_read;
+		
+		// count lines in reverse
 		for(i; i >= 0; i--) {
 			if (buf[i] == '\n') linecnt++;
-			if (linecnt == offset) break;
+			// the caount
+			if (linecnt > offset) break;
 		}
-		ssize_t len = bytes_read - i - 1;
-		printf("allocating: %d\n", len + 1);
+
+		// the length starting from the end of the string to the 
+		// lastest newline. This is usually somewhere inside buf
+		ssize_t len = bytes_read - i - 1; 
+		
+		// append the line to the end of the the buffer list
 		buffers[buffcnt] = malloc((len+1)*sizeof(char));
+		// there is no newline in buf, use strn to copy the correct length
 		strncpy(buffers[buffcnt], buf, len);
-		buffers[buffcnt][len] = '\0';
-		printf("created %s", buffers[buffcnt]);
+		buffers[buffcnt][len] = '\0'; 
 		buffcnt++;
 
-
-		if (linecnt == offset || cur == 0) {
+		// linecnt should be 1 greater than number of newlines
+		// eg: a 7 line file only has 6 newlines
+		// also exit if the current fd offset is at 0
+		if (linecnt > offset || cur == 0) {
 			break;
 		}
-
+		
+		// move fd pointer back 1 BUFFER size and make sure this will is 
+		// not further than the begining of the buffer 
 		if (cur - BUFFER - bytes_read >= 0) {
-			cur = lseek(fd, -BUFFER-bytes_read-1, SEEK_CUR);
+			cur = lseek(fd, -BUFFER-bytes_read, SEEK_CUR);
 		} else {
 			length_to_read = lseek(fd, 0, SEEK_CUR) - BUFFER;
 			cur = lseek(fd, 0, SEEK_SET); 
-			printf("length to read %lu\n", length_to_read);
 		}
-		printf("current SEEK = %d\n", cur);
 	}
-	printf("line count: %d\n", linecnt);	
 	close(fd);
 	for (ssize_t  i = buffcnt - 1; i >= 0; i--){
 		printf("%s", buffers[i]);
