@@ -8,6 +8,19 @@
 #ifndef BUFFER
 #define BUFFER 1024
 #endif
+
+MAX_LINE 500
+
+/**
+ * Simple implementation of GNU tail
+ *
+ *
+ * This version does not need to re-read data from I/O as the 
+ * naive approach. However for this reason it must allocate 
+ * memory for each line. Thus for practical uses it can run
+ * faster. This also means that there is a potential maximum
+ * for number of lines as an offset that can be used.
+ */
 int main(int argc, char* argv[]) {
 	int offset = 10;	
 	int opt;
@@ -20,7 +33,7 @@ int main(int argc, char* argv[]) {
 	while ((opt = getopt(argc, argv, "n:")) != -1) {
 		if (opt == 'n') {
 			offset = atoi(optarg);
-			if (offset > 100) offset = 100;
+			if (offset > MAX_LINE) offset = MAX_LINE;
 			else if (offset == 0) return 0;
 			break;
 		}
@@ -34,7 +47,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	char buf[BUFFER];
-	char* buffers[100];
+	char* buffers[MAX_LINE];
         size_t buffcnt = 0;		
 	ssize_t length_to_read = BUFFER;
 	ssize_t bytes_read;
@@ -86,6 +99,5 @@ int main(int argc, char* argv[]) {
 		free(buffers[i]);
 	}
 
-	//printf("\n");
 	return 0;
 }
