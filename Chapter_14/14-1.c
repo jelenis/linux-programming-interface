@@ -25,6 +25,7 @@ int testfs(char* template, int file_count, int inorder) {
 			perror("Error creating files");
 			exit(EXIT_FAILURE);
 		} else {
+			write(fd, "A", 1);
 			close(fd);
 		}	
 	}	
@@ -63,7 +64,11 @@ int testfs(char* template, int file_count, int inorder) {
  * Test the speed of creating and removing files
  * when removing them in both the order they were
  * created and not 
- */
+ *
+ * For file systems like ext2 with a block size of 4096
+ * we should see that there is faster to remove files in order
+ * since they would be removed from the front of the linked list 
+ **/
 int main(int argc, char* argv[]) {
 	int file_count;
 	
