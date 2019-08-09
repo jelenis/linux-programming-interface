@@ -23,9 +23,7 @@ int is_user(uid_t id, FILE* fp, char* name) {
 	// look for user id field in status file
 	// cannot assume that line numbers are portable
 	while (fgets(buf, 256, fp) != NULL) {
-		if (strncmp(buf, "Name:", 5) == 0) {
-			sscanf(buf, "Name: %s", name);
-		}
+		sscanf(buf, "Name: %s", name);
 		// Uid field has the following format:
 		// Uid: [real id] [effective id] [saved set id] [file system id]
 		if (strncmp(buf, "Uid:", 4) == 0) {
@@ -35,6 +33,10 @@ int is_user(uid_t id, FILE* fp, char* name) {
 	}
 	if (real_id == id) return 1;
 	return 0;
+}
+
+int get_process_list{
+
 }
 
 int main (int argc, char* argv[]) {

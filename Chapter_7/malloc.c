@@ -15,14 +15,15 @@ void *fit(size_t new_len);
 void pp(void * ptr);
 void ppp();
 
-void** free_list;
+//void** free_list;
 void* head;
 size_t min_size = sizeof(size_t) + 2*sizeof(void**);
 
-void * malloc(size_t size) {
+void * m_malloc(size_t size) {
 	// if not found request from kernel
 	size = sizeof(size_t) + size;
 
+	//printf("i"); 
 	if (size < min_size) {
 		size = min_size; // add space for next/prev
 	}
@@ -51,8 +52,8 @@ void** get_next(void* ptr) {
 
 void ppp() {
 	printf("-----------------\n");
-	if (free_list != NULL) 
-	for (void* cur = *free_list; cur != NULL;) {
+	//if (free_list != NULL) 
+	for (void* cur = head; cur != NULL;) {
 		
 		pp(cur);
 		cur = *get_next(cur);
@@ -62,38 +63,38 @@ void ppp() {
 }
 
 
-void free(void* ptr) {
+void m_free(void* ptr) {
 	void* base = ptr - sizeof(size_t);
 	//printf("allocated to: %lld\n", &ptr[7]-&base[7]);
 	void** next = base + sizeof(size_t) + sizeof(void**);
 	void** prev = base + sizeof(size_t);
 	size_t length = *((size_t*)base);
 
-	if (free_list == NULL) {
-		free_list = sbrk(sizeof(void**));
-	}
+	//if (free_list == NULL) {
+		//free_list = sbrk(sizeof(void**));
+	//}
 
 	printf("freeing length = %lld\n", length);
-	printf("head is %zu\n", *free_list);
+	printf("head is %zu\n", head);
 	printf("base: %zu (%s) next=%zu prev=%zu\n", base, ptr, *next, *prev);
 	
 
 	*prev = NULL; 
 	*next = NULL;
-	if (*free_list != NULL) {
+	if (head != NULL) {
 		// value at next = head of list
-		*next = *free_list;
+		*next = head;
 		
-		*(get_prev(*free_list)) = base;
+		*(get_prev(head)) = base;
 	} 
 	// make head point to current 
-	*free_list = base; 
+	head = base; 
 	head = base;
 
 
 	printf("\tnext resides at %zu\tvalue in next: %zu\n", next, *next);
 	printf("\tprev resides at %zu\tvalue in prev: %zu\n", prev, *prev);
-	printf("\thead resides at %zu\tvalue in head: %zu\n", free_list, *free_list);
+	printf("\thead resides at %zu\tvalue in head: %zu\n", &head , head);
 	printf("\n");
 }
 
@@ -107,8 +108,8 @@ void pp(void *base) {
 
 
 void* fit(size_t new_len) {
-	if (free_list == NULL) return NULL; 
-	void* cur = *free_list;
+	//if (free_list == NULL) return NULL; 
+	void* cur = head;
 	printf("finding fit for %lld\n", new_len);
 	 //traversal
 	while(cur != NULL ) {
@@ -118,12 +119,12 @@ void* fit(size_t new_len) {
 		
 		if (len == new_len) {
 			// next of prev -> next of cur
-			if (cur != *free_list) { 
+			if (cur != head) { 
 				*get_next(*get_prev(cur)) = *get_next(cur);  	
 			} else {
 				printf("test\n");	
 				ppp(cur);
-				*free_list = *get_next(cur);
+				head = *get_next(cur);
 			}
 			// prev of next -> prev of cur
 			if (*get_next(cur) != NULL) {
@@ -132,6 +133,7 @@ void* fit(size_t new_len) {
 			*get_next(cur) = NULL;
 			*get_prev(cur) = NULL;
 			return cur;
+
 		} else if (len >= min_size +new_len) {
 			void* split = cur + new_len;
 			// split
@@ -148,10 +150,10 @@ void* fit(size_t new_len) {
 			}
 			
 			// next of prev -> split	
-			if (cur != *free_list) {
+			if (cur != head) {
 				*get_next(*get_prev(cur)) = split;
 			} else {
-				*free_list = split;
+				head = split;
 			}
 
 			*get_next(cur) = NULL;
@@ -168,11 +170,11 @@ void* fit(size_t new_len) {
 
 
 int main() {
-	char* i = malloc(4);
-	char* k = malloc(32);
+	char* i = m_malloc(4);
+	char* k = m_malloc(32);
 	//printf("allocated to: %lld\n", *(size_t*)(i - sizeof(size_t)));
 	////printf("allocated to: %lld\n", *(size_t*)(j - sizeof(size_t)));
-	char* j = malloc(1000);
+	char* j = m_malloc(10000);
 
 	if (i == NULL) {
 		printf("malloc failed\n");
@@ -180,11 +182,11 @@ int main() {
 		return -1;
 	}	
 	ppp();
-	free(j);
-	free(k);
-	free(i);
-	char * x = malloc(500);
-	free(x);
+	m_free(j);
+	m_free(k);
+	m_free(i);
+	char * x = m_malloc(500);
+	m_free(x);
 	ppp();
 	//ppp();	
 	return 0;

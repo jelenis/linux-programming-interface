@@ -29,7 +29,7 @@ struct passwd* getpwnam(const char* name);
 void read_user(char* token) {
 	int member = 0;
 	strcpy(pw_name, token);
-
+	// TODO: use sscanf instaed
 	while (token != NULL) {
 		if(token[-1] != ':')// check for empty field
 		switch (member) {
