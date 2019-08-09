@@ -49,7 +49,11 @@ struct FTW {
 	int level;
 
 };
-
+/**
+ * Peforms the recursive walk of nftw
+ * uses preorder dfs unless specified by flags argument
+ * Returns 0 on success, -1 on error
+ */
 int _nftw(const char* dirpath,
 		int (*fn) (const char* fpath, const struct stat* sb, int typeflag, struct FTW *ftwbuf),
 		int nopenfd, int flags, int level) {
@@ -133,25 +137,45 @@ int _nftw(const char* dirpath,
 
 }
 
+/**
+ * Implmentation of nftw(2) using dfs recursion.
+ * actual recursion is peformed in the helper function of the same name 
+ * preceeded by an underscore (_nftw). This function is simply a wrapper that
+ * provides _nftw with the real path and a level argument
+ *
+ * returns 0 on success -1 on error
+ */
 int nftw(const char* dirpath,
 		int (*fn) (const char* fpath, const struct stat* sb, int typeflag, struct FTW *ftwbuf),
 		int nopenfd, int flags) {
 		int level = 0;	
 		char real_path[PATH_MAX];
+		int result;
+
 		if (realpath(dirpath, real_path) == NULL)
 			return  -1;		
 		
-		return _nftw(real_path, fn, nopenfd, flags, level);
+		// use recursion to walk the file tree
+		result =  _nftw(real_path, fn, nopenfd, flags, level);
+
+		// restore working directory
+		if (chdir(dirpath) == -1)
+			return -1;
+
+		return result;
 	}
+
+
+/**
+ * called by main to test ntfw 
+ */
 int walk(const char* fpath, const struct stat* sb, int type, struct FTW* ftwbuf) {
 	printf("%s\n", fpath );
 	return 0;
 }
 
-
 /**
- * 
- *
+ * Driver program to test nftw
  */
 int main(int argc, char* argv[]) {
 
