@@ -3,11 +3,10 @@
 #include <unistd.h>
 #include <signal.h>
 
-void handler (int sig) {
-	// unsafe, used for testing
-	printf("handled\n");
-}
-
+/**
+ * Loops through each type of signal and prints the name of the
+ * signal if it is pending for this process
+ */
 int print_pending() {
 	sigset_t pending;
 	if (sigpending(&pending) == -1) {
@@ -21,6 +20,12 @@ int print_pending() {
 	printf("\n");
 }
 
+/**
+ * Simple demonstration of ignoring pending signals
+ * prints the signals pending before the ignore,
+ * and will print nothing after the ingore has been applied
+ * (provided that SIGINT was actually supplied during the wait)
+ */
 int main(int argc, char* argv[]) {
 	sigset_t block_set, prev_mask;	
 	
@@ -33,8 +38,9 @@ int main(int argc, char* argv[]) {
 	}
 	
 	// wait, if a interrupt is signaled it will be pending
+	printf("Please type Ctrl-c to generate an interrupt (within 3 seconds)\n");
 	sleep(3);
-	
+	printf("\n");
 	
 	// view current pending signals
 	printf("printing pending signals\n");
