@@ -147,7 +147,7 @@ void insert_right(Node* root, Node* leaf) {
 void delete(Tree* tree, char key) {
 	Node* cur = tree->root;
 	Node* next;
-	Node* prev;	
+	Node* prev = NULL;	
 	int done = 0;
 
 
@@ -236,7 +236,7 @@ int main () {
 
 	// print the tree before 
 	printTree(tre.root);	
-	delete(&tre, 'z');
+	delete(&tre, 'e');
 	printf("**** After Delete ****\n");
 	// print the tree after deleting
 	printTree(tre.root);	
