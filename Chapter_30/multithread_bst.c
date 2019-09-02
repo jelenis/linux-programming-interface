@@ -11,6 +11,16 @@ typedef struct Node {
 	struct Node* right;
 } Node;
 
+typedef struct Tree {
+	Node* root;
+	pthread_mutex_t mtx;
+} Tree;
+Tree tre;
+
+void initialize(Tree* tre) {
+	tre->root = NULL;
+	pthread_mutex_init(&(tre->mtx), NULL);	
+}
 
 Node* create_node(char key, void* val) {
 	Node *leaf;
@@ -24,56 +34,12 @@ Node* create_node(char key, void* val) {
 	return leaf;
 }
 
-void init(Node** tree) {
-	*tree = create_node('\0', NULL);
-}
 
-void add (Node* tree, char key, void* val) {
-	int done = 0; // use to skip loop and unlock mutexs
-
-	if (tree == NULL) {
-		printf("Root node must be initialized\n");
-		return;
-	}
-
-	Node* cur = tree;
-	Node* next;
-	while (!done) {
-		if(pthread_mutex_lock(&cur->mtx) != 0) {
-			perror("lock");
-			return;
-		}
-
-		if (cur->key == '\0') { // no value in root
-			tree->key = key;
-			tree->val = val;
-			done = 1;
-		} else if (key <= cur->key) {
-			if (cur->left == NULL) {
-				cur->left = create_node(key, val);
-				done = 1;
-			} else 
-				next = cur->left;
-		} else {
-			if (cur->right == NULL) {
-				cur->right = create_node(key, val); 
-				done = 1;
-			}  else
-				next = cur->right;
-		}
-		if(pthread_mutex_unlock(&cur->mtx) != 0) {
-			perror("unlock");
-			return;
-		}
-		cur = next;
-	}
-}
-
-int lookup (Node* tree, char key, void **value) {
+int lookup (Tree* t, char key, void **value) {
 	int done = 0;	
 	int found = 0;	
 
-	Node* cur = tree;
+	Node* cur = t->root;
 	Node* next;
 	while(!done) {
 		if(pthread_mutex_lock(&cur->mtx) != 0) {
@@ -111,35 +77,167 @@ int lookup (Node* tree, char key, void **value) {
 }
 
 void printTree(Node* root) {
-	if (root == NULL) 
+	if (root == NULL) {
+		printf("(null)\n");
 		return;
+	}
 	printf("here %c\n", root->key);
 	printTree(root->left);
 	printTree(root->right);
 }
 
-Node* t;
+void add(Tree* t, char key, void* val) {
+	int done = 0; // use to skip loop and unlock mutexs
+
+	if (t->root == NULL) {
+		t->root = create_node(key, val);
+		return;
+	}
+
+	Node* cur = t->root;
+	Node* next;
+	while (!done) {
+		if(pthread_mutex_lock(&cur->mtx) != 0) {
+			perror("lock");
+			return;
+		}
+
+		if (key <= cur->key) {
+			if (cur->left == NULL) {
+				cur->left = create_node(key, val);
+				done = 1;
+			} else 
+				next = cur->left;
+		} else {
+			if (cur->right == NULL) {
+				cur->right = create_node(key, val); 
+				done = 1;
+			}  else
+				next = cur->right;
+		}
+		if(pthread_mutex_unlock(&cur->mtx) != 0) {
+			perror("unlock");
+			return;
+		}
+		cur = next;
+	}
+}
+
+void insert_right(Node* root, Node* leaf) {
+	if (leaf == NULL) {
+		return;	
+	}
+
+	Node* cur = root;
+	while (cur && cur->right) {
+		if (pthread_mutex_lock(&cur->mtx) != 0) {
+			perror("lock");
+			return;
+		}		
+		cur = cur->right;
+		if(pthread_mutex_unlock(&cur->mtx) != 0) {
+			perror("unlock");
+			return;
+		}	
+	}
+	cur->right = leaf;
+
+
+}
+void delete(Tree* tree, char key) {
+	Node* cur = tree->root;
+	Node* next;
+	Node* prev;	
+	int done = 0;
+
+
+	while (cur && !done) {
+		if(pthread_mutex_lock(&cur->mtx) != 0) {
+			perror("lock");
+			return;
+		}	
+
+		if (key == cur->key) {
+			if (prev == NULL) { // root
+				if(pthread_mutex_lock(&tree->mtx) != 0) {
+					perror("lock");
+					return;
+				}		
+				insert_right(cur->left, cur->right);
+				tree->root = cur->left;
+				if(pthread_mutex_unlock(&tree->mtx) != 0) {
+					perror("unlock");
+					return;
+				}		
+				done = 1;
+			} else if (prev->left == cur) { // left subchild
+				if (cur->left) {
+					prev->left = cur->left;
+					insert_right(cur->left, cur->right);
+				} else 
+					prev->left = cur->right;
+			} else {
+				if (cur->left) {
+					prev->right = cur->left;
+					insert_right(cur->left, cur->right);
+				} else 
+					prev->right = cur->right;
+			}
+			
+			
+			printf("found %c\n", cur->key);
+			done = 1;
+		} else if (key <= cur->key && cur->left != NULL) {
+			next = cur->left;
+		} else if (cur->right != NULL) {
+			next = cur->right;
+		} else {
+			done = 1;
+		}
+		if(prev && pthread_mutex_unlock(&prev->mtx) != 0) {
+			perror("unlock");
+			return;
+		}
+		prev = cur;
+		cur = next;
+
+		
+	}
+	if(pthread_mutex_unlock(&cur->mtx) != 0) {
+		perror("unlock");
+		return;
+	}
+
+
+}
 static void* threadFunc(void* arg) {
 	char c  = *(char*)arg;
 	void* ptr = malloc(1);;
-	add(t, c, ptr);
-	
+	add(&tre, c, ptr);
+
 	printf("%c done\n", c);
 }
-int main () {
-       	init(&t);
-	pthread_t thread_A, thread_B;
-	char c = 'b';
-	pthread_create(&thread_A, NULL, threadFunc, &c);
-	char x = 'a';
-	pthread_create(&thread_B, NULL, threadFunc, &x);
 
-	char h = 'h';
-	add(t, 'e', &h);
-	void* ptr;
+int main () {
+	pthread_t thread_A, thread_B;
+	initialize(&tre);
+	
+	// testing chars as keys
+	char b = 'b';
+	char z = 'z';
+	add(&tre, 'e', NULL);
+
+	pthread_create(&thread_A, NULL, threadFunc, &b);
+	pthread_create(&thread_B, NULL, threadFunc, &z);
 
 	pthread_join(thread_A, NULL);
 	pthread_join(thread_B, NULL);
-	lookup(t, 'e', &ptr); 
-	printTree(t);	
+	add(&tre, 'c', NULL);
+
+	// print the tree before 
+	printTree(tre.root);	
+	delete(&tre, 'z');
+	printf("**** After Delete ****\n");
+	// print the tree after deleting
+	printTree(tre.root);	
 }
