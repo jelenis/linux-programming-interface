@@ -30,7 +30,6 @@ int main () {
 			/* give children a chance to start and orphan 
 			this is a race condition, but will be fine for
 		       	for demo purposes */
-			read(STDIN_FILENO, buf, 1);
 			exit(EXIT_SUCCESS);
 	}
 	
