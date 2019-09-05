@@ -12,33 +12,27 @@
  */
 int main(int argc, char* argv[]) {
 	int opt;
-	int num = 0;
-	//char* buf = malloc(_POSIX_ARG_MAX);
-	char buf[_POSIX_ARG_MAX];
-	buf[0] = '\0'; // empty string
+	int inc = 0;
 
 	while ((opt = getopt(argc, argv, "n:")) != -1) {
+		printf("%c", opt);
 		if (opt == 'n') {
-			num = atoi(optarg);	
+			inc = atoi(optarg);	
 		}
 	}		
 	
-	// concatinate the rest of argv arguments into a single command in buf	
-	for (int i = optind; i < argc; i++) {
-		sprintf(buf, "%s %s", buf, argv[i]);	
-	}
-
-	// set nice value, child process will inherit this
+	// set nice value, execed process will inherit this
 	errno = 0;
-	if (nice(num) == -1 && errno != 0) {
+	if (nice(inc) == -1 && errno != 0) {
 		perror("nice");
 		return -1;
 	}	
 	
-	// execute the command in system shell 
-	if (system(buf) == -1) {
+	/* exec the command in shell, path will be at optind, the arguments to
+	 * command will be at optind+1 */
+	if (execv(argv[optind], &argv[optind+1]) == -1) {
+		perror("execv");
 		return -1;
 	}
-	//free(buf);
 	return 0;
 }
