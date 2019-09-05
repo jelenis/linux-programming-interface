@@ -10,6 +10,11 @@
 #include <sys/wait.h>
 #include <errno.h>
 
+/**
+ * Consumes time for each process and displays the amount of time it has spend 
+ * executing every quarter of a second. Every second the CPU is realesed through
+ * sched_yield()
+ */
 static void consume_time() {
 	clock_t start = times(NULL);
 	clock_t end = start;
@@ -38,8 +43,7 @@ static void consume_time() {
 	}
 }
 /**
- * Runs a command with adjust niceness value, see nice(1)
- * for details.
+ * Uses a real-time fifo to schedule two process on the same CPU core
  */
 int main(int argc, char* argv[]) {
 	int policy;
@@ -59,12 +63,13 @@ int main(int argc, char* argv[]) {
 		exit(EXIT_FAILURE);
 	}
 	
-	int pid = fork();
+	// force this and child process to be executed on core 0
 	cpu_set_t set;
 	CPU_ZERO(&set);
 	CPU_SET(0, &set);	
-
 	sched_setaffinity(0, sizeof(cpu_set_t), &set);
+
+	int pid = fork();
 	switch(pid) {
 		case -1:
 			perror("fork");
