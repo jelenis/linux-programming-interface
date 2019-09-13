@@ -24,18 +24,35 @@ static void serveRequest(int msqid, Message* req, int seqNum){
 }
 
 int main () {
-	int msqid;
-	int seqNum = 0;
+	int msqid, fd, seqNum = 0;
 	struct sigaction sa;
 	
 	/* message queue with read and write permissions for
 	   bidirectional communication */
-	msqid = msgget(KEY, IPC_CREAT | IPC_EXCL 
+	msqid = msgget(IPC_PRIVATE, IPC_CREAT | IPC_EXCL 
 			| S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP);
 	if (msqid == -1) {
 		perror("msgget");
 		exit(EXIT_FAILURE);
 	}
+	printf("wrote id: %d\n", msqid);
+	
+	/* write identifier to a common file location */
+	fd = open(KEY_PATH, O_CREAT | O_WRONLY,
+				S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP);
+	if (fd == -1) {
+		perror("open");
+		exit(EXIT_FAILURE);
+	}
+	if (write(fd, &msqid, sizeof(msqid)) != sizeof(msqid)) {
+		perror("write");
+		exit(EXIT_FAILURE);
+	}
+	if (close(fd) == -1){
+		perror("close");
+		exit(EXIT_FAILURE);
+	}
+
 
 	// handler for terminated children
 	sa.sa_handler = reaper;

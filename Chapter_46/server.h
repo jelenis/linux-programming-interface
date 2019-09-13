@@ -8,8 +8,9 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <stddef.h>
+#include <fcntl.h>
 
-#define KEY 0xaabbccdd
+#define KEY_PATH "/tmp/key" 
 
 typedef struct {
 	long mtype; // pid of reciever (1 for server)

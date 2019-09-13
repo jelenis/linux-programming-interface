@@ -1,17 +1,13 @@
 #include "server.h"
 #include <string.h>
 
-static void removeQueue() {
-
-}
-
 /**
  * Requests a sequence of numbers from the server
  * using the length specified in argv[2]
  */
 int main (int argc, char* argv[]) {
 	Message req, resp;
-	int msqid, pid;
+	int msqid, pid, fd;
 	int seq_len = 0;
 
 	if (argc < 2) {
@@ -24,12 +20,19 @@ int main (int argc, char* argv[]) {
 		printf("Length must be greater than zero\n");
 		exit(EXIT_FAILURE);
 	}
-
-	msqid = msgget(KEY, S_IWUSR | S_IRUSR);
-	if (msqid == -1) {
-		perror("msgget");
+	
+	// load identifier from common file location
+	fd = open(KEY_PATH, O_RDONLY, S_IRUSR);
+	if (fd == -1) {
+		perror("open");
 		exit(EXIT_FAILURE);
 	}
+
+	if (read(fd, &msqid, sizeof(msqid)) != sizeof(msqid)) {
+		perror("read");
+		exit(EXIT_FAILURE);
+	}
+	close(fd);
 
 	// create request
 	pid = getpid();
