@@ -12,14 +12,14 @@ static void reaper(int signum) {
  * Recieves requests sent to sender and responds with
  * the start of the clients sequence
  */
-static void serveRequest(Message* req, int seqNum){
+static void serveRequest(int msqid, Message* req, int seqNum){
 	Message resp;	
 	resp.mtype = req->from; // send back to requester
 	resp.from = 1;
 	resp.seq = seqNum;
 	
 	// cannot do much about this error
-	if (msgsnd(KEY, &resp, MSG_SIZE, 0) == -1)
+	if (msgsnd(msqid, &resp, MSG_SIZE, 0) == -1)
 		perror("msgsnd");
 }
 
@@ -69,10 +69,10 @@ int main () {
 			break; // loop again
 		} else if (pid == 0) {
 			// allocate a sequence to this process
-			serveRequest(&req, seqNum);
+			serveRequest(msqid, &req, seqNum);
 			_exit(EXIT_SUCCESS);
 		}
-		// allocate sequence for this request
+		// move allocated sequence up
 		seqNum += req.seq;
 
 	}

@@ -17,5 +17,9 @@ typedef struct {
 	int seq;
 } Message; 
 
-#define MSG_SIZE (offsetof(Message, from) + offsetof(Message, seq))
+#define MSG_SIZE (\
+	 offsetof(Message, seq) \
+	 - offsetof(Message, from) \
+	 + sizeof(int)\
+)
 

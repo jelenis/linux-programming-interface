@@ -43,7 +43,7 @@ int main (int argc, char* argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	// block and wait for a response addressed to this pid
+	// block and wait for a response that has the address of this pid
 	if (msgrcv(msqid, &resp, MSG_SIZE, pid, 0) == -1) {
 		perror("msgrcv");
 		exit(EXIT_FAILURE);
