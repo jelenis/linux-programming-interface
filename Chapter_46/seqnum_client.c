@@ -45,7 +45,7 @@ int main (int argc, char* argv[]) {
 		perror("msgsnd");
 		exit(EXIT_FAILURE);
 	}
-	sleep(20);
+	
 	// block and wait for a response that has the address of this pid
 	if (msgrcv(msqid, &resp, MSG_SIZE, pid, 0) == -1) {
 		perror("msgrcv");
