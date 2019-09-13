@@ -1,10 +1,11 @@
 #include "server.h"
 #include <syslog.h>
+#include <string.h>
+
 static int msqid;
 
 /* timeout used to catch blocking system calls*/
 static void timeout(int signum) {
-	printf("timedout\n");
 	syslog(LOG_DAEMON | LOG_ERR, "Dropped client");
 }
 
@@ -60,6 +61,8 @@ static void serveRequest(Message* req, int seqNum){
 		syslog(LOG_DAEMON | LOG_ERR, "could not set timeout for request %d", req->from);
 		exit(EXIT_FAILURE);
 	}
+	syslog(LOG_DAEMON | LOG_ERR, "%d", msqid);
+
 	// cannot do much about this error
 	if (msgsnd(msqid, &resp, MSG_SIZE, 0) == -1) {
 		perror("msgsnd");
@@ -70,10 +73,68 @@ static void serveRequest(Message* req, int seqNum){
 	
 }
 
+static int becomeDaemon() {
+	int fd, maxfd;
+
+	/* become zombie process */
+	switch(fork()) {
+		case -1:
+			return -1;
+		case 0:
+			break;		 
+		default:
+		        _exit(EXIT_SUCCESS); 
+	}
+
+	// create new session leader
+	if (setsid() == -1)
+		return -1;
+	
+	// give up session leadership 
+	switch (fork()) {
+		case -1:
+			return -1;
+		case 0:
+			break;
+		default:
+			_exit(EXIT_SUCCESS);
+	}
+
+	/* clear file mode mask, change to root directory and 
+	   close all open files */
+	umask(0);
+	chdir("/");
+	maxfd = sysconf(_SC_OPEN_MAX);
+	if (maxfd == -1)
+		maxfd = 8192; // resonable guess
+	
+	for (fd = 0; fd < maxfd; fd++)
+		close(maxfd); // ignore error
+
+	/* Redirect stdin and stderr to /dev/null */
+	fd = open("/dev/null", O_RDWR);
+
+	/* since fd = 0, stdin will be set to /dev/null */
+	if (fd != STDIN_FILENO) 
+		return -1;
+	if (dup2(fd, STDIN_FILENO) != STDIN_FILENO) 
+		return -1;
+	if (dup2(fd, STDERR_FILENO) != STDERR_FILENO)
+		return -1;
+
+	return 0;
+}
+
 int main () {
 	int fd, seqNum = 0;
 	struct sigaction sa;
 	
+	if (becomeDaemon() == -1) { 
+		syslog(LOG_DAEMON | LOG_ERR, "Could not become daemon %s", strerror(errno)); 
+		exit(EXIT_FAILURE);
+	}
+	syslog(LOG_DAEMON | LOG_NOTICE, "Service started"); 
+
 	/* message queue with read and write permissions for
 	   bidirectional communication */
 	msqid = msgget(IPC_PRIVATE, IPC_CREAT | IPC_EXCL 

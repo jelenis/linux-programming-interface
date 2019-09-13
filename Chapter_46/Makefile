@@ -1,3 +1,6 @@
 all:
-	gcc seqnum_server.c -o server
-	gcc seqnum_client.c -o client
+	gcc -g seqnum_server.c -o server
+	gcc -g seqnum_client.c -o client
+
+clean:
+	rm client server
