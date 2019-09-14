@@ -1,8 +1,9 @@
-#include "server.h"
+#include "chat.h"
 #include <syslog.h>
 #include <string.h>
 
 static int msqid;
+static int connect[CLIENTS]; // maps user ids to msqids	
 
 /* timeout used to catch blocking system calls*/
 static void timeout(int signum) {
@@ -39,9 +40,8 @@ static void clean_up (int signum) {
  * the start of the clients sequence.
  * will timeout if msgsnd blocks as a result of a full msg queue
  */
-static void serveRequest(Message* req, int seqNum){
+static void serveRequest(Message* msg){
 	struct sigaction sa;	
-	Message resp;	
 
 	/* handler for alarm timemout, must be declared in this process 
 	   as alarms are cleared over fork */
@@ -51,28 +51,21 @@ static void serveRequest(Message* req, int seqNum){
 		perror("sigaction");
 		exit(EXIT_FAILURE);		
 	}
-
-	resp.mtype = req->from; // send back to requester
-	resp.from = 1;
-	resp.seq = seqNum;
-	
 	// set an alarm for timeout
 	if (alarm(2) != 0) {
-		syslog(LOG_DAEMON | LOG_ERR, "could not set timeout for request %d", req->from);
 		exit(EXIT_FAILURE);
 	}
-	syslog(LOG_DAEMON | LOG_ERR, "%d", msqid);
 
 	// cannot do much about this error
-	if (msgsnd(msqid, &resp, MSG_SIZE, 0) == -1) {
+	if (msgsnd(connect[msg->to], msg, MSG_SIZE, 0) == -1) {
 		perror("msgsnd");
-		syslog(LOG_DAEMON | LOG_ERR, "could not write message to %d", req->from);
+		syslog(LOG_DAEMON | LOG_ERR, "could not write message");
 	}
+	syslog(LOG_DAEMON | LOG_NOTICE, "wrote \"%s\" to uid: %d ", msg->data, msg->to);
 
 	alarm(0); // cancel alarm
 	
 }
-
 static int becomeDaemon() {
 	int fd, maxfd;
 
@@ -113,8 +106,8 @@ static int becomeDaemon() {
 
 	/* Redirect stdin and stderr to /dev/null */
 	fd = open("/dev/null", O_RDWR);
-
 	/* since fd = 0, stdin will be set to /dev/null */
+	syslog(LOG_DAEMON | LOG_WARNING,"%d %d", STDIN_FILENO, fd);
 	if (fd != STDIN_FILENO) 
 		return -1;
 	if (dup2(fd, STDIN_FILENO) != STDIN_FILENO) 
@@ -126,9 +119,9 @@ static int becomeDaemon() {
 }
 
 int main () {
-	int fd, seqNum = 0;
 	struct sigaction sa;
-	
+	memset(connect, -1, CLIENTS);
+
 	if (becomeDaemon() == -1) { 
 		syslog(LOG_DAEMON | LOG_ERR, "Could not become daemon %s", strerror(errno)); 
 		exit(EXIT_FAILURE);
@@ -137,26 +130,11 @@ int main () {
 
 	/* message queue with read and write permissions for
 	   bidirectional communication */
-	msqid = msgget(IPC_PRIVATE, IPC_CREAT | IPC_EXCL 
-			| S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP);
+	msqid = msgget(KEY, IPC_CREAT 
+			| S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP
+			| S_IWOTH);
 	if (msqid == -1) {
 		perror("msgget");
-		exit(EXIT_FAILURE);
-	}
-	
-	/* write identifier to a common file location */
-	fd = open(KEY_PATH, O_CREAT | O_WRONLY,
-				S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP);
-	if (fd == -1) {
-		perror("open");
-		exit(EXIT_FAILURE);
-	}
-	if (write(fd, &msqid, sizeof(msqid)) != sizeof(msqid)) {
-		perror("write");
-		exit(EXIT_FAILURE);
-	}
-	if (close(fd) == -1){
-		perror("close");
 		exit(EXIT_FAILURE);
 	}
 
@@ -184,10 +162,10 @@ int main () {
 	/* read incoming messages with the addressed to this process(type = 1)
 	   and handle the requests in a seperate process */
 	for (;;) {
-		Message req;	
-		int pid;
-		// block until a message with type 1 is received
-		int len = msgrcv(msqid, &req, MSG_SIZE, 1, 0);
+		int pid, len;
+		Message msg;	
+		// block until a message arrives
+		len = msgrcv(msqid, &msg, MSG_SIZE, 0, 0);
 		/* restart loop if error is a result of a signal interruption
 		   since it is impossible to restart these calls using SA_RESART */
 		if (len == -1) {
@@ -196,19 +174,32 @@ int main () {
 			perror("msgrcv");
 			break; // else shutdown server
 		}
-
-		/* Create new process to handle request */
-		pid = fork();
-		if (pid == -1) {
-			perror("fork");
-			break; // loop again
-		} else if (pid == 0) {
-			// allocate a sequence to this process
-			serveRequest(&req, seqNum);
-			_exit(EXIT_SUCCESS);
+		
+		if (msg.mtype == M_CONNECT) {
+			connect[msg.from] = msg.msqid;
+			syslog(LOG_NOTICE | LOG_DAEMON, "user: %d has connected", msg.from);
+		} else if (msg.mtype == M_DISCON) {
+			connect[msg.from] = -1;
+		} else if (msg.mtype == M_DATA) {
+			// ignore connectionless message
+			if (connect[msg.to] == -1)
+				continue;
+				
+			/* Create new process to handle request */
+			pid = fork();
+			if (pid == -1) {
+				perror("fork");
+				break; // loop again
+			} else if (pid == 0) {
+				// allocate a sequence to this process
+				serveRequest(&msg);
+				_exit(EXIT_SUCCESS);
+			}
 		}
-		// move allocated sequence up
-		seqNum += req.seq;
+
+
+			
+
 	}
 
 }
