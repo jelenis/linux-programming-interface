@@ -1,5 +1,8 @@
 /**
  * simple chat server like talk(1)
+ * Services multiple message concurrently by forking another process
+ * Note that most of the time this will be less efficient than just
+ * sending the message in the ma in queue, but its just for demo.
  */
 #include "chat.h"
 #include <syslog.h>
