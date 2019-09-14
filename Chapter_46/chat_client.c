@@ -1,3 +1,6 @@
+/**
+ * simple chat client like talk(1)
+ */
 #include "chat.h"
 #include <string.h>
 static int myid, serverid;

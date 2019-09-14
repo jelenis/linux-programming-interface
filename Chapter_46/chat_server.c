@@ -1,3 +1,6 @@
+/**
+ * simple chat server like talk(1)
+ */
 #include "chat.h"
 #include <syslog.h>
 #include <string.h>
