@@ -1,3 +1,12 @@
+/**
+ * A simple talk(1) like messaging service.
+ * Uses unidirectional POSIX message queues to route message to a from clients.
+ * A client sends a message to a user by placing the message on the server queue,
+ * the server then maps forwards the message to the correct POSIX queue of the 
+ * recipient.
+ *
+ * Uses Multiprocessing for simplicity, multithreading would make more sense.
+ */
 #include "chat.h"
 #include <errno.h>
 
@@ -12,6 +21,9 @@ static void handler(int signum) {
 	errno = e;
 }
 
+/**
+ * Handle requests concurrently
+ */
 static void handleRequest(Message *msg) {
 	struct mq_attr attr;
 	char cq_name[NAME_MAX] = "/";	
@@ -34,14 +46,18 @@ static void handleRequest(Message *msg) {
 	}
 }
 
+/**
+ * Recieves messages from the SRV POSIX message queue and forwards them
+ * the appropriate user queue that is analogous to their username
+ */
 int main() {
 	struct sigaction sa;
 	struct mq_attr attr;
 	mqd_t mqd;
 	
+	// install a signal handler to reap zombie children
 	sa.sa_handler = handler;
 	sa.sa_flags = 0; // SA_RESTART doesnt work on message queues
-
 	if (sigaction(SIGCHLD, &sa, NULL) == -1) {
 		perror("server: sigaction");
 		exit(EXIT_FAILURE);
@@ -49,13 +65,14 @@ int main() {
 
 	attr.mq_msgsize = sizeof(Message);
 	attr.mq_maxmsg = 10;
-	umask(0);
+	umask(0); // needed so that other users can open the message queue
 	mqd = mq_open(SERVER, O_CREAT | O_RDONLY, perms, &attr);
 	if (mqd == -1) {
 		perror("server: open");
 		exit(EXIT_FAILURE);
 	}
 
+	/* loop forever waiting for clients to send messages */
 	for(;;) {
 		Message msg;
 		ssize_t numBytes = mq_receive(mqd, (char*)&msg, attr.mq_msgsize, NULL); 
