@@ -27,22 +27,34 @@ static int init = 0;
 /**
  * Wrapper for System V sempahores to implement the POSIX semaphore API.
  * This is just a subset of the real functionality see man page for more details.
+ * the ... (stdarg) arguments are not actually optional since this would require a more complex
+ * macro.
  */
 sem_t *sem_open(const char *name, int oflag, ...) {
 	mode_t mode;
 	int fd, semid;
 	char filename[PATH_MAX];
 	unsigned int value;
+
 	va_list ap;
 	va_start(ap, oflag);
 	mode = va_arg(ap, mode_t);
+	printf("%d\n", mode);
 	value = va_arg(ap, unsigned int);
 	va_end(ap);
-	printf("%d %u\n", mode, value);
+
+	if (init == 0) {
+		memset(semidv, 0, sizeof(semidv));
+		init = 1;
+	}
 		
+
 	umask(0);
 	sprintf(filename, "/dev/shm/sem.%s", name);
 	fd = open(filename, O_CREAT, mode);
+	if (fd == -1) 
+		return SEM_FAILED;
+	
 	close(fd);
 	
 
@@ -52,10 +64,6 @@ sem_t *sem_open(const char *name, int oflag, ...) {
 		return SEM_FAILED;
 	}
 
-	if (init == 0) {
-		memset(semidv, 0, sizeof(semidv));
-		init = 1;
-	}
 	// initialize semaphore (this isnt atomic as it should be)
 	union semun arg;
 	arg.val = value;
@@ -65,6 +73,10 @@ sem_t *sem_open(const char *name, int oflag, ...) {
 	semidv[semid].semid = semid;
 	semidv[semid].cnt += 1;
 	strcpy(semidv[semid].filename, name);
+	// cannot create a new sempahore since its been unlinked
+	if (semidv[semid].unlink == 1) {
+		return SEM_FAILED;
+	}
 	return &semidv[semid].semid;
 }
 int sem_getvalue(sem_t *sem, int *sval) {
@@ -102,36 +114,3 @@ int sem_unlink(sem_t *sem) {
 	semidv[*sem].unlink = 1;
 }
 
-/**
- * Driver program to test this System V implmentation of POSIX semaphores.
- */
-int main() {
-	int val;
-	sem_t *sem = sem_open("hi", O_RDWR, S_IRUSR | S_IWUSR, 1);
-	if (sem == SEM_FAILED) {
-		perror("sem_open");
-		return -1;
-	}
-	sem_getvalue(sem, &val);
-	if (val == -1 && errno != 0) {
-		perror("sem_getvalue");	
-		return -1;
-	}
-	printf("semaphore is: %d\n", val);
-
-	sem_unlink(sem);
-	if (sem_destroy(sem) == -1) {
-		perror("sem_destroy");
-		return -1;
-	}
-
-	printf("Removed semaphore\n");
-	
-	// this should produce an error
-	sem_getvalue(sem, &val);
-	if (val == -1 && errno != 0) {
-		perror("sem_getvalue");	
-		return -1;
-	}
-	printf("semaphore is: %d\n", val);
-}

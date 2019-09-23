@@ -30,8 +30,7 @@ static void* writer(void *arg) {
 
 		// signal reader thread that we are finished
 		if (numRead == 0)
-			memset(buf, 0, 1024);
-			//done = 1;
+			done = 1;
 
 		if (sem_post(&rsem) == -1) {
 			perror("sem_post writer");	
