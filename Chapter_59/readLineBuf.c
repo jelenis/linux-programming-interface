@@ -48,10 +48,10 @@ ssize_t readLineBuf(struct rl *rlbuf, char* buffer, size_t n) {
 		numRead = read(rlbuf->fd, rlbuf->buf, rlbuf->size);
 		if (numRead == -1)
 			return -1;
-		//printf("\t\tread %s\n", rlbuf->buf);
 	}
 
-	for (; rlbuf->c < (char*)rlbuf->buf + rlbuf->size; rlbuf->c++) {
+	// iterate through the buffer until the next newline
+	for (; rlbuf->c < rlbuf->buf + rlbuf->size; rlbuf->c++) {
 		if (*rlbuf->c == '\n')
 			break;
 		if (cnt < n)	
