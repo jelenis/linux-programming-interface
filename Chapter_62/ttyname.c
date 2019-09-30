@@ -8,6 +8,11 @@
 
 static char buf[PATH_MAX];
 
+/**
+ * Scans the directory in root for a character devices that has the
+ * same device id as fd.
+ * Returns the name of the file.
+ */
 char *matchfd (const char *root, int fd) {
 	static struct stat sb;
 	struct dirent* dent;
@@ -41,6 +46,11 @@ char *matchfd (const char *root, int fd) {
 	errno = ENOENT;
 	return NULL;
 }
+/**
+ * Simple implementation of ttyname(3), see man page for
+ * more details.
+ * Returns the name of terminal or NULL on error.
+ */
 char *ttyname(int fd) {
 	char *res;
 	if ((res = matchfd("/dev/pts", fd)) != NULL) 
