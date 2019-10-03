@@ -6,6 +6,7 @@
 #include <ctype.h>
 
 int childPid;
+struct termios tty;
 
 static void errExit(char *str) {
 	perror(str);	
@@ -34,6 +35,10 @@ void master_exit() {
 	updwtmpx(_PATH_WTMP, &ut);
 	endutxent();
 
+	if (tcsetattr(STDIN_FILENO, TCSANOW, &tty) == -1)
+		errExit("tcgetattr");
+
+	printf("\r\nConnection Closed");
 	exit(EXIT_SUCCESS);
 }
 static char escape_buf[1000];
@@ -68,11 +73,11 @@ static char *escape(char *str) {
 
 static void serviceRequest(int cfd) {
 	int masterfd;
-	struct termios tty;
 	char slaveName[MAX_NAME];
 
 	if (tcgetattr(STDIN_FILENO, &tty) == -1)
 		errExit("tcgetattr");
+	ttySetRaw(STDIN_FILENO, &tty);
 	// create both a master and slave pseudoterminal
 	childPid = ptyFork(&masterfd, slaveName, MAX_NAME, &tty, NULL);
 	if (childPid == -1)
@@ -82,11 +87,6 @@ static void serviceRequest(int cfd) {
 
 	// childPid is the slave pseudoterminal
 	if (childPid == 0) { 
-		/* remove echooing (else this will come back and print what
-		   the user had already typed) */
-		tty.c_lflag &= ~ECHO;
-		if (tcsetattr(STDIN_FILENO, TCSANOW, &tty) == -1) 
-			errExit("tcsetattr");
 		/* Execute login(1) on child pty slave */
 		execlp("login", "login",  (char *) NULL);
 		errExit("exec"); // should never reach here
@@ -150,7 +150,6 @@ static void serviceRequest(int cfd) {
 						
 				if (write(masterfd, buf, num) != num)
 					errExit("partial write (masterfd)");
-				printf("cfd ---[%s]---> pty\n", escape(buf));
 
 			} else if (events[n].data.fd == masterfd) {
 				// pty --> cfd
@@ -177,7 +176,6 @@ static void serviceRequest(int cfd) {
 			
 				if (write(cfd, buf, num) != num)
 					errExit("partial write (cfd)");
-				printf("\t\t\tcfd <---[%s]--- pty\n", escape(buf));
 			}
 		}
 
