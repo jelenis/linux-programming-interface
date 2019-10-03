@@ -1,4 +1,10 @@
+#define _GNU_SOURCE
 #include "remote.h"
+#include <utmpx.h>
+#include <paths.h>
+#include <time.h>
+
+int childPid;
 
 static void errExit(char *str) {
 	perror(str);	
@@ -7,26 +13,48 @@ static void errExit(char *str) {
 
 static void reaper(int sig) {
 	int e = errno;
-
 	while(waitpid(-1, NULL, WNOHANG) > 0)
 		continue;
 	errno = e;
 }
 
+void master_exit() {
+	struct utmpx ut;
+
+	kill(childPid, SIGKILL);
+	ut.ut_type = DEAD_PROCESS;
+	time((time_t *) &ut.ut_tv.tv_sec);
+	memset(ut.ut_user, 0, sizeof(ut.ut_user));
+
+	setutxent();
+	if (pututxline(&ut) == NULL)
+		errExit("pututxline");
+
+	updwtmpx(_PATH_WTMP, &ut);
+	endutxent();
+
+	exit(EXIT_SUCCESS);
+}
+
+
 static void serviceRequest(int cfd) {
 	int masterfd;
-	int childPid;
 	struct termios tty;
+	char slaveName[MAX_NAME];
 
 	if (tcgetattr(STDIN_FILENO, &tty) == -1)
 		errExit("tcgetattr");
-	// create both a master and slave psuedoterminal
-	childPid = ptyFork(&masterfd, NULL, 0, &tty, NULL);
+	// create both a master and slave pseudoterminal
+	childPid = ptyFork(&masterfd, slaveName, MAX_NAME, &tty, NULL);
 	if (childPid == -1)
 		errExit("ptyFork");
+	if (strlen(slaveName) <= 8)
+		errExit("terminal name too short");
 
-	// childPid is the slave psuedoterminal
+	// childPid is the slave pseudoterminal
 	if (childPid == 0) { 
+		/* remove echooing (else this will come back and print what
+		   the user had already typed) */
 		tty.c_lflag &= ~ECHO;
 		if (tcsetattr(STDIN_FILENO, TCSANOW, &tty) == -1) 
 			errExit("tcsetattr");
@@ -34,14 +62,26 @@ static void serviceRequest(int cfd) {
 		execlp("login", "login",  (char *) NULL);
 		errExit("exec"); // should never reach here
 	} 
+	
+	if (atexit(master_exit) != 0)
+		errExit("atexit");
 
-	/* Parent falls here, this is the master psuedoterminal.
+	/* Parent falls here, this is the master pseudoterminal.
 	   relay data between the master and slave here using epoll*/
 	int epfd, nfds;
 	ssize_t num;
 	char buf[256];
+	int logged_in = 0, first = 1; // bool
 	struct epoll_event ev, events[2];
-	//ttySetRaw(STDIN_FILENO, &tty);
+	struct utmpx ut;
+
+
+	memset(&ut, 0, sizeof(struct utmpx));
+	ut.ut_pid = childPid;
+	ut.ut_type = USER_PROCESS;
+	// use the pseudo termial name as for utmpx timestamp
+	strncpy(ut.ut_line, slaveName + 5, sizeof(ut.ut_line));
+	strncpy(ut.ut_id, slaveName + 8, sizeof(ut.ut_id));
 	       
 	epfd = epoll_create1(0);
 	if (epfd == -1)
@@ -57,6 +97,7 @@ static void serviceRequest(int cfd) {
 	ev.data.fd = masterfd;
 	if (epoll_ctl(epfd, EPOLL_CTL_ADD, masterfd, &ev) == -1)
 		errExit("epoll_ctl");
+	
 	for (;;) {
 		/* make blocking call until there is input to from cfd or 
 		   output from the slave */
@@ -71,8 +112,13 @@ static void serviceRequest(int cfd) {
 				if (num <= 0) // eof or error
 					exit(EXIT_SUCCESS);
 				buf[num] = '\0';
+
+				if (!logged_in && first) {
+					// get the user name 
+					strncpy(ut.ut_user, buf, num - 1);
+					first = 0;
+				}
 						
-				printf("cfd --> [%s]:%d --> masterfd\n", buf, num);
 				if (write(masterfd, buf, num) != num)
 					errExit("partial write (masterfd)");
 			} else if (events[n].data.fd == masterfd) {
@@ -81,8 +127,22 @@ static void serviceRequest(int cfd) {
 				if (num <= 0) // eof or error
 					exit(EXIT_SUCCESS);
 				buf[num] = '\0';
-				printf("masterfd --> [%s]:%d --> cfd\n", buf, num);
-				//printf("%d %x \t %d %x\n", num-2, buf[num-2], num-1, buf[num-1]);
+
+				// time stamp in wtmp and utmpx file
+				if (!logged_in && strncmp(buf, "Last login:", 11) == 0) {
+					logged_in = 1;
+
+					printf("Session started: %s %s %s\n", ut.ut_user, ut.ut_line, ut.ut_id);
+					if (time((time_t *) &ut.ut_tv.tv_sec) == -1)
+						errExit("time");
+
+					setutxent(); // re-wind (good practice)
+					if (pututxline(&ut) == NULL)
+						errExit("pututxline");
+					updwtmpx(_PATH_WTMP, &ut);
+				} else if (!logged_in && strcmp(buf, "Login incorrect") == 0) {
+					first = 1; // attempt login again
+				}
 			
 				if (write(cfd, buf, num) != num)
 					errExit("partial write (cfd)");

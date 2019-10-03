@@ -9,11 +9,14 @@ int main(int argc, char *argv[]) {
 	ssize_t num;
 	char host[32];
 	struct epoll_event ev, events[2];
+	struct termios tty;
 
+	if (tcgetattr(STDIN_FILENO, &tty) == -1)
+		errExit("tcgetattr");
+	
 	if (argc < 2) {
 		strcpy(host, "localhost");
 	}		
-
 
 	cfd = inetConnect(host, SERVICE, SOCK_STREAM);
 	if (cfd == -1)
@@ -44,9 +47,17 @@ int main(int argc, char *argv[]) {
 		for (int n = 0; n < 2; n++) {
 			if (events[n].data.fd == cfd) {
 				num = read(cfd, buf, sizeof(buf));
+				
 				if (num <= 0) {
 					printf("connection closed\n");
 					exit(EXIT_SUCCESS);
+				}
+				buf[num] = '\0';
+				
+				if (strncmp(buf, "Password: ", 10) == 0) {
+					tty.c_lflag &= ~ ECHO;
+					if (tcsetattr(STDIN_FILENO, TCSANOW, &tty) == -1)
+						errExit("tcsetattr");
 				}
 				if (write(STDOUT_FILENO, buf, num) != num)
 					errExit("partial write (stdout)");
@@ -58,8 +69,19 @@ int main(int argc, char *argv[]) {
 					printf("connection closed\n");
 					exit(EXIT_SUCCESS);
 				}
+
+				if (!(tty.c_lflag & ECHO)) {
+					tty.c_lflag |= ECHO;
+					if (tcsetattr(STDIN_FILENO, TCSANOW, &tty) == -1)
+						errExit("tcsetattr");
+					printf("\n");
+				}
+
+				buf[num] = '\0';
+
 				if (write(cfd, buf, num) != num)
 					errExit("partial write (stdout)");
+				printf("sent (%s) %d bytes\n", buf, num);
 			}
 
 		}
