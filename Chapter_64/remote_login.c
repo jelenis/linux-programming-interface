@@ -3,6 +3,7 @@
 #include <utmpx.h>
 #include <paths.h>
 #include <time.h>
+#include <ctype.h>
 
 int childPid;
 
@@ -35,7 +36,35 @@ void master_exit() {
 
 	exit(EXIT_SUCCESS);
 }
-
+static char escape_buf[1000];
+static char *escape(char *str) {
+	char *p;
+	char *e = escape_buf;
+	char num[10];
+	for (p = str; *p != '\0'; p++) {
+		switch (*p) {
+			case '\n':
+				*e++ = '\\';
+				*e++ = 'n';
+				break;
+			case '\r':
+				*e++ = '\\';
+				*e++ = 'r';
+				break;
+			
+			default:
+				if (isalnum(*p) || *p == ' ' || ispunct(*p)) {
+					*e++ = *p;
+				} else {
+					sprintf(num, "{%d}", *p);
+					strcat(e,num);
+					e += strlen(num);
+				}
+		}		
+	}
+	*e = '\0';
+	return escape_buf;
+}
 
 static void serviceRequest(int cfd) {
 	int masterfd;
@@ -121,6 +150,8 @@ static void serviceRequest(int cfd) {
 						
 				if (write(masterfd, buf, num) != num)
 					errExit("partial write (masterfd)");
+				printf("cfd ---[%s]---> pty\n", escape(buf));
+
 			} else if (events[n].data.fd == masterfd) {
 				// pty --> cfd
 				num = read(masterfd, buf, sizeof(buf));
@@ -146,6 +177,7 @@ static void serviceRequest(int cfd) {
 			
 				if (write(cfd, buf, num) != num)
 					errExit("partial write (cfd)");
+				printf("\t\t\tcfd <---[%s]--- pty\n", escape(buf));
 			}
 		}
 
